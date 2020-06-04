@@ -35,7 +35,7 @@ gfpop <- function(data, mygraph, type = "mean", weights = NULL, testMode = FALSE
   }
   else{weights <- 0} #to send a double in gfpopTransfer
   if(length(data) < 2){stop('data vector length is less than 2...')}
-  if(any(is.na(data)))stop("data has missing values, please remove them")
+  if(any(is.na(data)))stop("The `data` vector has missing values, please remove them")
 
   ######################
   ### GRAPH ANALYSIS ###
@@ -56,18 +56,18 @@ gfpop <- function(data, mygraph, type = "mean", weights = NULL, testMode = FALSE
   ### Response class gfpop ###
   ############################
 
-  if(length(res$changepoints) == 1) ##### best output state
+  if(length(res$changepoints) == 1) ##### best output state = one output only
   {
     response <- list(changepoints = c(rev(res$changepoints[[1]][-1]), length(data)), states = vertices[rev(res$states[[1]])+1], forced = rev(res$forced[[1]]), parameters = rev(res$param[[1]]), globalCost = res$cost[[1]])
   }
   else  ##### multiple output state
   {
     p <- length(res$changepoints)
-    lastStates <- NULL
+    lastStates <- NULL #elements named by the output state
     for(i in 1:p)
     {
       res$changepoints[[i]] <- c(rev(res$changepoints[[i]][-1]), length(data))
-      res$states[[i]] <- vertices[rev(res$states[[i]])+1]
+      res$states[[i]] <- vertices[rev(res$states[[i]]) + 1]
       lastStates <- c(lastStates, rev(res$states[[i]])[1])
       res$forced[[i]] <- rev(res$forced[[i]])
       res$param[[i]] <- rev(res$param[[i]])

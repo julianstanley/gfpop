@@ -1,5 +1,3 @@
-/* -*- compile-command: "R CMD INSTALL .." -*- */
-
 #include "Graph.h"
 
 #include<iostream>
@@ -92,53 +90,24 @@ Interval Graph::buildInterval(double argmin, unsigned int s1, unsigned int s2, b
 }
 
 
-// ### recursiveState ### /// /// ### recursiveState ### /// /// ### recursiveState ### /// /// ### recursiveState ### ///
-// ### recursiveState ### /// /// ### recursiveState ### /// /// ### recursiveState ### /// /// ### recursiveState ### ///
+// ### feasibleInterval ### /// /// ### feasibleInterval ### /// /// ### feasibleInterval ### /// /// ### feasibleInterval ### ///
+// ### feasibleInterval ### /// /// ### feasibleInterval ### /// /// ### feasibleInterval ### /// /// ### feasibleInterval ### ///
 
-double Graph::recursiveState(unsigned int s) const
+Interval Graph::feasibleInterval(double argmin, Edge const& edge) const
 {
-  double response =  1;
-  for(unsigned int i = 0; i < edges.size(); i++)
+  Interval response = cost_interval();
+
+  if(edge.getConstraint() == "null")
   {
-    if((edges[i].getState1() == s) && (edges[i].getState2() == s) && (edges[i].getConstraint()  == "null")){response = edges[i].getParameter();}
+    response.seta(argmin/edge.getParameter());
+    response.setb(argmin/edge.getParameter());
   }
+  ///if(edge.getConstraint() == "std") => response = cost_interval()
+
+  if(edge.getConstraint() == "up"){response.setb(cost_interShift(argmin, -edge.getParameter()));}
+  if(edge.getConstraint()  == "down"){response.seta(cost_interShift(argmin, edge.getParameter()));}
+
   return(response);
-}
-
-
-// ### findBeta ### /// /// ### findBeta ### /// /// ### findBeta ### /// /// ### findBeta ### ///
-// ### findBeta ### /// /// ### findBeta ### /// /// ### findBeta ### /// /// ### findBeta ### ///
-
-double Graph::findBeta(unsigned int state1, unsigned int state2)
-{
-  double response = 0;
-  for (unsigned int i = 0 ; i < edges.size() ; i++)
-  {
-    if((edges[i].getState1() == state1) && (edges[i].getState2() == state2) && (edges[i].getConstraint() != "node"))
-    {
-      response = edges[i].getBeta();
-    }
-  }
-  return(response);
-}
-
-
-
-// ### nodeConstraints ### /// /// ### nodeConstraints ### /// /// ### nodeConstraints ### /// /// ### nodeConstraints ### ///
-// ### nodeConstraints ### /// /// ### nodeConstraints ### /// /// ### nodeConstraints ### /// /// ### nodeConstraints ### ///
-
-Interval* Graph::nodeConstraints()
-{
-  Interval* inter = new Interval[nb_states()];
-  for (unsigned int i = 0 ; i < nb_states(); i++)
-  {
-    inter[i] = cost_interval();
-  }
-  for (unsigned int i = 0 ; i < edges.size(); i++)
-  {
-    if(edges[i].getConstraint() == "node"){inter[edges[i].getState1()] = Interval(edges[i].getMinn(), edges[i].getMaxx());}
-  }
-  return(inter);
 }
 
 

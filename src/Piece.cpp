@@ -1,26 +1,24 @@
-/* -*- compile-command: "R CMD INSTALL .." -*- */
 #include "Piece.h"
 #include"ExternFunctions.h"
-
 #include <math.h>
 #include <stdlib.h>
 #include<iostream>
 
-Piece::Piece(){m_info = Track(); m_interval = Interval(); m_cost = Cost(); nxt = NULL;}
+Piece::Piece(){m_cost = Cost(); m_interval = Interval(); m_parentEdge = 0; nxt = NULL;}
 
-Piece::Piece(Track const& info, Interval const& inter, Cost const& cost)
+Piece::Piece(Cost const& cost, Interval const& inter, int parentEdge)
 {
-  m_info = info;
-  m_interval = inter;
   m_cost = cost;
+  m_interval = inter;
+  m_parentEdge = parentEdge;
   nxt = NULL;
 }
 
 Piece::Piece(const Piece* piece)
 {
-  m_info = piece -> m_info;
-  m_interval = piece -> m_interval;
   m_cost = piece -> m_cost;
+  m_interval = piece -> m_interval;
+  m_parentEdge = piece -> m_parentEdge;
   nxt = NULL;
 }
 
@@ -43,11 +41,12 @@ Piece* Piece::copy(){return(new Piece(this));}
 //####### addCostAndPenalty #######////####### addCostAndPenalty #######////####### addCostAndPenalty #######//
 //####### addCostAndPenalty #######////####### addCostAndPenalty #######////####### addCostAndPenalty #######//
 
-void Piece::addCostAndPenalty(Cost const& cost, double penalty)
+void Piece::addCostAndPenaltyAndParentEdge(Cost const& cost, double penalty, unsigned int parentEdge)
 {
   m_cost.m_A = m_cost.m_A + cost.m_A;
   m_cost.m_B = m_cost.m_B + cost.m_B;
   m_cost.constant = m_cost.constant + cost.constant + penalty;
+  m_parentEdge = parentEdge;
 }
 
 
@@ -142,7 +141,7 @@ Interval Piece::intervalMinLessDw(double bound, double currentValue, bool constP
 //####### pastePieceUp #######// //####### pastePieceUp #######// //####### pastePieceUp #######//
 
 
-Piece* Piece::pastePieceUp(const Piece* NXTPiece, Interval const& decrInter, Track const& newTrack)
+Piece* Piece::pastePieceUp(const Piece* NXTPiece, Interval const& decrInter)
 {
   Piece* BUILD = this;
 
@@ -160,13 +159,12 @@ Piece* Piece::pastePieceUp(const Piece* NXTPiece, Interval const& decrInter, Tra
     ///ADD of the PIECE NXTPiece (troncated)
     if(BUILD -> m_interval.isEmpty()) ///if BUILD empty
     {
-      BUILD -> m_interval.setb(decrInter.getb());
       BUILD -> m_cost = NXTPiece -> m_cost;
-      BUILD -> m_info.setTrack(newTrack);
+      BUILD -> m_interval.setb(decrInter.getb());
     }
     else
     {
-      Piece* NewQ = new Piece(newTrack, decrInter, NXTPiece -> m_cost);
+      Piece* NewQ = new Piece(NXTPiece -> m_cost, decrInter);
       BUILD -> nxt = NewQ;
       BUILD = NewQ;
     }
@@ -174,7 +172,7 @@ Piece* Piece::pastePieceUp(const Piece* NXTPiece, Interval const& decrInter, Tra
     if(!((NXTPiece -> nxt == NULL) && (decrInter.getb() == NXTPiece -> m_interval.getb())))
     {
       double outputValue = cost_eval(NXTPiece -> m_cost, decrInter.getb());
-      Piece* PieceOut = new Piece(newTrack, Interval(decrInter.getb(), NXTPiece -> m_interval.getb()), Cost());
+      Piece* PieceOut = new Piece(Cost(), Interval(decrInter.getb(), NXTPiece -> m_interval.getb()));
       addConstant(PieceOut -> m_cost, outputValue);
       BUILD -> nxt = PieceOut;
       BUILD = PieceOut;
@@ -190,7 +188,7 @@ Piece* Piece::pastePieceUp(const Piece* NXTPiece, Interval const& decrInter, Tra
 //####### pastePieceDw #######// //####### pastePieceDw #######// //####### pastePieceDw #######//
 
 
-Piece* Piece::pastePieceDw(const Piece* NXTPiece, Interval const& decrInter, Track const& newTrack)
+Piece* Piece::pastePieceDw(const Piece* NXTPiece, Interval const& decrInter)
 {
   Piece* BUILD = this;
 
@@ -208,13 +206,12 @@ Piece* Piece::pastePieceDw(const Piece* NXTPiece, Interval const& decrInter, Tra
     ///ADD of the PIECE NXTPiece (troncated)
     if(BUILD -> m_interval.isEmpty()) ///if BUILD empty
     {
-      BUILD -> m_interval.seta(decrInter.geta());
       BUILD -> m_cost = NXTPiece -> m_cost;
-      BUILD -> m_info.setTrack(newTrack);
+      BUILD -> m_interval.seta(decrInter.geta());
     }
     else
     {
-      Piece* NewQ = new Piece(newTrack, decrInter, NXTPiece -> m_cost);
+      Piece* NewQ = new Piece(NXTPiece -> m_cost, decrInter);
       BUILD -> nxt = NewQ;
       BUILD = NewQ;
     }
@@ -222,7 +219,7 @@ Piece* Piece::pastePieceDw(const Piece* NXTPiece, Interval const& decrInter, Tra
     if(!((NXTPiece -> nxt == NULL) && (decrInter.geta() == NXTPiece -> m_interval.geta())))
     {
       double outputValue = cost_eval(NXTPiece -> m_cost, decrInter.geta());
-      Piece* PieceOut = new Piece(newTrack, Interval(NXTPiece -> m_interval.geta(), decrInter.geta()), Cost());
+      Piece* PieceOut = new Piece(Cost(), Interval(NXTPiece -> m_interval.geta(), decrInter.geta()));
       addConstant(PieceOut -> m_cost, outputValue);
       BUILD -> nxt = PieceOut;
       BUILD = PieceOut;
@@ -323,8 +320,8 @@ Piece* Piece::piece0(Piece* Q1, Piece* Q2, Interval interToPaste, int& Q2_Minus_
   if (BUILD -> m_interval.isEmpty() == true) /// IF BUILD interval = empty
   {
     BUILD -> m_interval.setb(interToPaste.getb());
-    if(Q2_Minus_Q1 == 1){BUILD -> m_cost = Q1 -> m_cost; BUILD -> m_info = Q1 -> m_info;}
-    if(Q2_Minus_Q1 == -1){BUILD -> m_cost = Q2 -> m_cost; BUILD -> m_info = Q2 -> m_info;}
+    if(Q2_Minus_Q1 == 1){BUILD -> m_cost = Q1 -> m_cost; BUILD -> m_parentEdge = Q1 -> m_parentEdge;}
+    if(Q2_Minus_Q1 == -1){BUILD -> m_cost = Q2 -> m_cost; BUILD -> m_parentEdge = Q2 -> m_parentEdge;}
   }
   else
   {
@@ -336,8 +333,8 @@ Piece* Piece::piece0(Piece* Q1, Piece* Q2, Interval interToPaste, int& Q2_Minus_
     if (test == true) ///Prolongation
     {
       BUILD -> m_interval.setb(interToPaste.getb());
-      if(Q2_Minus_Q1 == 1){BUILD -> m_cost = Q1 -> m_cost; BUILD -> m_info = Q1 -> m_info;}
-      if(Q2_Minus_Q1 == -1){BUILD -> m_cost = Q2 -> m_cost; BUILD -> m_info = Q2 -> m_info;}
+      if(Q2_Minus_Q1 == 1){BUILD -> m_cost = Q1 -> m_cost; BUILD -> m_parentEdge = Q1 -> m_parentEdge;}
+      if(Q2_Minus_Q1 == -1){BUILD -> m_cost = Q2 -> m_cost; BUILD -> m_parentEdge = Q2 -> m_parentEdge;}
     }
     else ///pb with the cost -> we stop BUILD interval at interToPaste left -> we create a new piece
     {
@@ -345,8 +342,8 @@ Piece* Piece::piece0(Piece* Q1, Piece* Q2, Interval interToPaste, int& Q2_Minus_
       BUILD -> m_interval.setb(interToPaste.geta());
       Piece* newPiece = new Piece();
       newPiece -> m_interval = interToPaste;
-      if(Q2_Minus_Q1 == 1){newPiece -> m_cost = Q1 -> m_cost; newPiece -> m_info = Q1 -> m_info;}
-      if(Q2_Minus_Q1 == -1){newPiece -> m_cost = Q2 -> m_cost; newPiece -> m_info = Q2 -> m_info;}
+      if(Q2_Minus_Q1 == 1){newPiece -> m_cost = Q1 -> m_cost; newPiece -> m_parentEdge = Q1 -> m_parentEdge;}
+      if(Q2_Minus_Q1 == -1){newPiece -> m_cost = Q2 -> m_cost; newPiece -> m_parentEdge = Q2 -> m_parentEdge;}
       BUILD -> nxt = newPiece;
       BUILD = newPiece;
     }
@@ -371,8 +368,8 @@ Piece* Piece::piece1(Piece* Q1, Piece* Q2, Interval interToPaste, Interval inter
   Cost costDiff = minusCost(Q2 -> m_cost, Q1 -> m_cost);
   Q2_Minus_Q1 = signValue(cost_eval(costDiff, centerPoint));
 
-  if(Q2_Minus_Q1 == 1){BUILD -> m_cost = Q1 -> m_cost; BUILD -> m_info = Q1 -> m_info;}
-  if(Q2_Minus_Q1 == -1){BUILD -> m_cost = Q2 -> m_cost; BUILD -> m_info = Q2 -> m_info;}
+  if(Q2_Minus_Q1 == 1){BUILD -> m_cost = Q1 -> m_cost; BUILD -> m_parentEdge = Q1 -> m_parentEdge;}
+  if(Q2_Minus_Q1 == -1){BUILD -> m_cost = Q2 -> m_cost; BUILD -> m_parentEdge = Q2 -> m_parentEdge;}
 
   BUILD -> m_interval.setb(theChangePoint);
 
@@ -384,8 +381,8 @@ Piece* Piece::piece1(Piece* Q1, Piece* Q2, Interval interToPaste, Interval inter
   costDiff = minusCost(Q2 -> m_cost, Q1 -> m_cost);
   Q2_Minus_Q1 = signValue(cost_eval(costDiff, centerPoint));
 
-  if(Q2_Minus_Q1 == 1){newPiece -> m_cost = Q1 -> m_cost; newPiece -> m_info = Q1 -> m_info;}
-  if(Q2_Minus_Q1 == -1){newPiece -> m_cost = Q2 -> m_cost; newPiece -> m_info = Q2 -> m_info;}
+  if(Q2_Minus_Q1 == 1){newPiece -> m_cost = Q1 -> m_cost; newPiece -> m_parentEdge = Q1 -> m_parentEdge;}
+  if(Q2_Minus_Q1 == -1){newPiece -> m_cost = Q2 -> m_cost; newPiece -> m_parentEdge = Q2 -> m_parentEdge;}
   BUILD -> nxt = newPiece;
   BUILD = newPiece;
 
@@ -409,16 +406,16 @@ Piece* Piece::piece2(Piece* Q1, Piece* Q2, Interval interToPaste, Interval inter
   Q2_Minus_Q1 = signValue(cost_eval(costDiff, centerPoint));///INVERSION!!!
 
   Q2_Minus_Q1 = -Q2_Minus_Q1; ///INVERSION!!!
-  if(Q2_Minus_Q1 == 1){BUILD -> m_cost = Q1 -> m_cost; BUILD -> m_info = Q1 -> m_info;}
-  if(Q2_Minus_Q1 == -1){BUILD -> m_cost = Q2 -> m_cost; BUILD -> m_info = Q2 -> m_info;}
+  if(Q2_Minus_Q1 == 1){BUILD -> m_cost = Q1 -> m_cost; BUILD -> m_parentEdge = Q1 -> m_parentEdge;}
+  if(Q2_Minus_Q1 == -1){BUILD -> m_cost = Q2 -> m_cost; BUILD -> m_parentEdge = Q2 -> m_parentEdge;}
   BUILD -> m_interval.setb(interRoots.geta());
 
   //CONSTRUCTION newPiece1
   Q2_Minus_Q1 = -Q2_Minus_Q1; ///INVERSION!!!
   Piece* newPiece1 = new Piece();
   newPiece1 -> m_interval = interRoots;
-  if(Q2_Minus_Q1 == 1){newPiece1 -> m_cost = Q1 -> m_cost; newPiece1 -> m_info = Q1 -> m_info;}
-  if(Q2_Minus_Q1 == -1){newPiece1 -> m_cost = Q2 -> m_cost; newPiece1 -> m_info = Q2 -> m_info;}
+  if(Q2_Minus_Q1 == 1){newPiece1 -> m_cost = Q1 -> m_cost; newPiece1 -> m_parentEdge = Q1 -> m_parentEdge;}
+  if(Q2_Minus_Q1 == -1){newPiece1 -> m_cost = Q2 -> m_cost; newPiece1 -> m_parentEdge = Q2 -> m_parentEdge;}
   BUILD -> nxt = newPiece1;
   BUILD = newPiece1;
 
@@ -426,8 +423,8 @@ Piece* Piece::piece2(Piece* Q1, Piece* Q2, Interval interToPaste, Interval inter
   //CONSTRUCTION newPiece2
   Piece* newPiece2 = new Piece();
   newPiece2 -> m_interval = Interval(interRoots.getb(), interToPaste.getb());
-  if(Q2_Minus_Q1 == 1){newPiece2 -> m_cost = Q1 -> m_cost; newPiece2 -> m_info = Q1 -> m_info;}
-  if(Q2_Minus_Q1 == -1){newPiece2 -> m_cost = Q2 -> m_cost; newPiece2 -> m_info = Q2 -> m_info;}
+  if(Q2_Minus_Q1 == 1){newPiece2 -> m_cost = Q1 -> m_cost; newPiece2 -> m_parentEdge = Q1 -> m_parentEdge;}
+  if(Q2_Minus_Q1 == -1){newPiece2 -> m_cost = Q2 -> m_cost; newPiece2 -> m_parentEdge = Q2 -> m_parentEdge;}
   BUILD -> nxt = newPiece2;
   BUILD = newPiece2;
 
@@ -435,19 +432,15 @@ Piece* Piece::piece2(Piece* Q1, Piece* Q2, Interval interToPaste, Interval inter
 }
 
 
-//####### get_min_argmin_label_state_position #######// //####### get_min_argmin_label_state_position #######// //####### get_min_argmin_label_state_position #######//
-//####### get_min_argmin_label_state_position #######// //####### get_min_argmin_label_state_position #######// //####### get_min_argmin_label_state_position #######//
+//####### get_min_argmin_edge #######// //####### get_min_argmin_edge #######// //####### get_min_argmin_edge #######//
+//####### get_min_argmin_edge #######// //####### get_min_argmin_edge #######// //####### get_min_argmin_edge #######//
 
-void Piece::get_min_argmin_label_state_position(double* response)
+void Piece::get_min_argmin_edge(double* response)
 {
   response[0] = cost_minInterval(this -> m_cost, this -> m_interval);
   response[1] = cost_argminBacktrack(this -> m_cost, this -> m_interval);
-  response[2] = this -> m_info.getLabel();
-  response[3] = this -> m_info.getState();
-  response[4] = this -> m_info.getPosition();
+  response[2] = this -> m_parentEdge;
 }
-
-
 
 /////////////////////////////////////////////////////////////////////
 /////////////////////////////////////////////////////////////////////
@@ -460,7 +453,7 @@ void Piece::show()
   else
   {
     std::cout << "          " << tmp;
-    std::cout << " #LABEL# "<< tmp -> m_info.getLabel() << " #STATE# " <<  tmp -> m_info.getState() << " POSITION " << tmp -> m_info.getPosition() << " ";
+    std::cout << " #EDGE# "<< tmp -> m_parentEdge << " ";
     std::cout << " #INTERVAL# "<< tmp -> m_interval.geta() << " to " << tmp -> m_interval.getb() << " ";
     showCost(tmp -> m_cost);
   }

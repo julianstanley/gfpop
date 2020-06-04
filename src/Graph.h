@@ -29,9 +29,7 @@ class Graph
     std::vector<unsigned int> getEndState() const;
 
     Interval buildInterval(double argmin, unsigned int s1, unsigned int s2, bool& out) const;
-    double recursiveState(unsigned int s) const;
-    double findBeta(unsigned int state1, unsigned int state2);
-    Interval* nodeConstraints();
+    Interval feasibleInterval(double argmin, Edge const& edge) const;
 
     void show() const;
 

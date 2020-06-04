@@ -138,7 +138,7 @@ List gfpopTransfer(NumericVector vectData, DataFrame mygraph, std::string type, 
     _["forced"] = omega.GetForced(),
     _["param"] = omega.GetParameters(),
     _["cost"] = omega.GetGlobalCost()
-);
+  );
 
   return res;
 }

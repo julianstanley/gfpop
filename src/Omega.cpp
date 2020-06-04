@@ -45,8 +45,8 @@ std::vector< double > Omega::GetGlobalCost() const{return(globalCost);}
 //####### initialize_LP_ts #######// //####### initialize_LP_ts #######// //####### initialize_LP_ts #######//
 //####### initialize_LP_ts #######// //####### initialize_LP_ts #######// //####### initialize_LP_ts #######//
 // initialize LP_ts for all t and s
-// t = 0 for all s : LP_ts[0][s] = addFirstPiece(new Piece(Track(), Interval(mini, maxi), 0 or +INFINITY));
-// t > 1 for all s : LP_ts[t][s] = addFirstPiece(new Piece(Track(), Interval(mini, maxi), +INFINITY));
+// t = 0 for all s : LP_ts[0][s] = addFirstPiece(new Piece(0 or +INFINITY, Interval(mini, maxi), 0));
+// t > 1 for all s : LP_ts[t][s] = addFirstPiece(new Piece(+INFINITY, Interval(mini, maxi), 0));
 
 void Omega::initialize_LP_ts(Point firstData, unsigned int n)
 {
@@ -56,7 +56,11 @@ void Omega::initialize_LP_ts(Point firstData, unsigned int n)
   unsigned int nbR = m_graph.nb_rows();
 
   LP_ts = new ListPiece*[n + 1];
-  for(unsigned int i = 0; i < (n + 1); i++){LP_ts[i] = new ListPiece[p]; for(unsigned int j = 0; j < p; j++){LP_ts[i][j] = ListPiece();}}
+  for(unsigned int i = 0; i < (n + 1); i++)
+  {
+    LP_ts[i] = new ListPiece[p];
+    for(unsigned int j = 0; j < p; j++){LP_ts[i][j] = ListPiece();}
+  }
 
   ///REVEAL NODE BOUNDARIES IF ANY
   ///REVEAL NODE BOUNDARIES IF ANY
@@ -70,15 +74,15 @@ void Omega::initialize_LP_ts(Point firstData, unsigned int n)
         maxi = m_graph.getEdge(k).getMaxx();
       }
     }
-    LP_ts[1][j].addFirstPiece(new Piece(Track(), Interval(mini, maxi), Cost()));
+    LP_ts[1][j].addFirstPiece(new Piece(Cost(), Interval(mini, maxi), 0));
 
     for(unsigned int i = 2; i < (n + 1); i++)
     {
-      LP_ts[i][j].addFirstPiece(new Piece(Track(), Interval(mini, maxi), Cost()));
+      LP_ts[i][j].addFirstPiece(new Piece(Cost(), Interval(mini, maxi), 0));
       LP_ts[i][j].setUniquePieceCostToInfinity();
     }
-    mini = inter.geta();
-    maxi = inter.getb();
+    mini = inter.geta(); ///back to initial interval
+    maxi = inter.getb(); ///back to initial interval
   }
 
   ///START STATE CONSTRAINT + add FirstPoint to LP_ts[1]
@@ -114,10 +118,10 @@ void Omega::gfpop(Data const& data)
 	for(unsigned int t = 1; t < n; t++) // loop for all data point
 	{
 	  LP_edges_operators(t); // fill_LP_edges. t = newLabel to consider
-	  LP_edges_addPointAndPenalty(myData[t]); // Add new data point and penalty
+	  LP_edges_addPointAndPenaltyAndParentEdge(myData[t]); // Add new data point and penalty
     LP_t_new_multipleMinimization(t); // multiple_minimization
 	}
-	backtracking();
+	backtracking_StateByState();
 }
 
 //####### gfpop END #######// //####### gfpop END #######// //####### gfpop END #######//
@@ -151,7 +155,7 @@ void Omega::gfpopTestMode(Data const& data)
     std::cout << t << "  &&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&" << std::endl;
     // */
     LP_edges_operators(t); // fill_LP_edges. t = newLabel to consider
-    LP_edges_addPointAndPenalty(myData[t]); // Add new data point and penalty
+    LP_edges_addPointAndPenaltyAndParentEdge(myData[t]); // Add new data point and penalty
 
     // /*
     std::cout << "  LP_edgesLP_edgesLP_edgesLP_edgesLP_edgesLP_edges "<< t<< std::endl;
@@ -179,7 +183,7 @@ void Omega::gfpopTestMode(Data const& data)
     // */
 
   }
-  backtracking();
+  backtracking_StateByState();
 }
 
 //####### gfpopTestMode END #######// //####### gfpopTestMode END #######// //####### gfpopTestMode END #######//
@@ -196,19 +200,19 @@ void Omega::LP_edges_operators(unsigned int t)
     // COMMENT: i-th edge = m_graph.getEdge(i)
     // COMMENT: starting state = m_graph.getEdge(i).getState1()
     // COMMENT: t is the label to associate to the constraint
-    LP_edges[i].LP_edges_constraint(LP_ts[t][m_graph.getEdge(i).getState1()], m_graph.getEdge(i), t);
+    LP_edges[i].LP_edges_constraint(LP_ts[t][m_graph.getEdge(i).getState1()], m_graph.getEdge(i));
   }
 }
 
-//##### LP_edges_addPointAndPenalty #####//////##### LP_edges_addPointAndPenalty #####//////##### LP_edges_addPointAndPenalty #####///
-//##### LP_edges_addPointAndPenalty #####//////##### LP_edges_addPointAndPenalty #####//////##### LP_edges_addPointAndPenalty #####///
+//##### LP_edges_addPointAndPenaltyAndParentEdge #####//////##### LP_edges_addPointAndPenaltyAndParentEdge #####//////##### LP_edges_addPointAndPenaltyAndParentEdge #####///
+//##### LP_edges_addPointAndPenaltyAndParentEdge #####//////##### LP_edges_addPointAndPenaltyAndParentEdge #####//////##### LP_edges_addPointAndPenaltyAndParentEdge #####///
 
-void Omega::LP_edges_addPointAndPenalty(Point const& pt)
+void Omega::LP_edges_addPointAndPenaltyAndParentEdge(Point const& pt)
 {
-  for(unsigned char i = 0; i < q; i++) /// loop for all q edges
+  for(unsigned int i = 0; i < q; i++) /// loop for all q edges
   {
     // COMMENT: LP_edges[i] = i-th edge = m_graph.getEdge(i) BECAUSE we need K, a and penalty
-    LP_edges[i].LP_edges_addPointAndPenalty(m_graph.getEdge(i), pt);
+    LP_edges[i].LP_edges_addPointAndPenaltyAndParentEdge(pt, m_graph.getEdge(i), i);
   }
 }
 
@@ -218,13 +222,13 @@ void Omega::LP_edges_addPointAndPenalty(Point const& pt)
 void Omega::LP_t_new_multipleMinimization(unsigned int t)
 {
   // COMMENT: m_graph was rearranged with increasing integer state2 AND increasing beta penalty
-  // COMMENT: LP_ts[t + 1][j] initialized in initialize_LP_ts by addFirstPiece(new Piece(Track(), Interval(mini, maxi), +INFINITY))
-  unsigned int k = 0;
+  // COMMENT: LP_ts[t + 1][j] initialized in initialize_LP_ts by addFirstPiece(new Piece(+INFINITY, Interval(mini, maxi), 0))
+  int k = 0;
   for(unsigned int j = 0 ; j < p; j++)
   {
     while((k < q) && (m_graph.getEdge(k).getState2() == j))
     {
-      LP_ts[t + 1][j].LP_ts_Minimization(LP_edges[k]);
+      LP_ts[t + 1][j].LP_ts_Minimization(LP_edges[k], k);
       k = k + 1;
       /*
       std::cout << " SHOW ";
@@ -236,110 +240,77 @@ void Omega::LP_t_new_multipleMinimization(unsigned int t)
   }
 }
 
+//##### backtracking_StateByState #####//////##### backtracking_StateByState #####//////##### backtracking_StateByState #####///
+//##### backtracking_StateByState #####//////##### backtracking_StateByState #####//////##### backtracking_StateByState #####///
 
-//##### backtracking #####//////##### backtracking #####//////##### backtracking #####///
-//##### backtracking #####//////##### backtracking #####//////##### backtracking #####///
-
-void Omega::backtracking()
+void Omega::backtracking_StateByState()
 {
-  std::vector< int > changepoints1;
+  /// vector to fill for each end state
   std::vector< double > parameters1;
   std::vector< int > states1;
   std::vector< int > forced1;
+  bool onBound; //forced or not forced transition
 
-  Interval constrainedInterval; // Interval to fit the constraints
+  double* minArgminEdge = new double[3];
 
-  double* malsp = new double[5];
-  double* malsp_temp = new double[5];
-  //Interval* nodeConstr = m_graph.nodeConstraints();
-
-  LP_ts[n][0].get_min_argmin_label_state_position_ListPiece(malsp);
-
-
-  ///////////////////
-  /// FINAL STATE ///
-  ///////////////////
-  unsigned int CurrentState = 0; // Current state
-  unsigned int CurrentChgpt = n; // data(1)....data(n). Last data index in each segment
-  double CurrentGlobalCost;
-  std::vector<unsigned int> endState = m_graph.getEndState();
-
-  // IF no endState, all the states are endstates => we select the best one
-  if(endState.size() == 0)
+  /////////// UPDATE Vector ENDSTATE ///////////
+  std::vector< unsigned int > endState = m_graph.getEndState();
+  if(endState.size() == 0)// IF no endState, we select the best one and add it in endState vector
   {
-    for (unsigned int j = 1 ; j < p ; j++) // for all p states
+    double myMinimalCost = +INFINITY; // min Cost
+    unsigned int CurrentState; // Current state with minimal cost
+    for (unsigned int j = 0; j < p ; j++) // for all p states
     {
-      LP_ts[n][j].get_min_argmin_label_state_position_ListPiece(malsp_temp);
-      if(malsp_temp[0] < malsp[0]){CurrentState = j; malsp[0] = malsp_temp[0];}
+      LP_ts[n][j].get_min_argmin_edge_ListPiece(minArgminEdge);
+      if(minArgminEdge[0] < myMinimalCost){myMinimalCost = minArgminEdge[0]; CurrentState = j;}
     }
+    endState.push_back(CurrentState);
   }
-  else ///=> multiple output //to be done
+
+  /////////// LOOP FOR ALL END STATES ///////////
+  unsigned int parentState;
+  double myUnpenalizedCost;
+  for(unsigned int k = 0 ; k < endState.size(); k++) /// loop for all q edges
   {
-    malsp[0] = INFINITY;
-    for (unsigned int j = 0 ; j < endState.size() ; j++) // for all endState available
+    ///////// Initial step /////////
+    LP_ts[n][endState[k]].get_min_argmin_edge_ListPiece(minArgminEdge);
+    myUnpenalizedCost = minArgminEdge[0];
+    parameters1.push_back(minArgminEdge[1]);
+    states1.push_back(endState[k]);
+    parentState = m_graph.getEdge(minArgminEdge[2]).getState1();
+
+    for(int t = n; t > 0; t--) // loop for all data point
     {
-      LP_ts[n][endState[j]].get_min_argmin_label_state_position_ListPiece(malsp_temp);
-      if(malsp_temp[0] < malsp[0]){CurrentState = endState[j]; malsp[0] = malsp_temp[0];}
+      myUnpenalizedCost = myUnpenalizedCost - m_graph.getEdge(minArgminEdge[2]).getBeta(); /// update cost
+      states1.push_back(parentState); /// parentState save
+      ///find armin and edge
+      LP_ts[t][parentState].get_min_argmin_edge_ListPieceConstrained(minArgminEdge, m_graph.getEdge(minArgminEdge[2]), onBound);
+      parameters1.push_back(minArgminEdge[1]);
+      forced1.push_back(onBound);
+      ///state1 associated to edge
+      parentState = m_graph.getEdge(minArgminEdge[2]).getState1();
     }
+
+    /// UPDATE Lists for each end state
+    parameters.push_back(parameters1);
+    states.push_back(states1);
+    forced.push_back(forced1);
+    globalCost.push_back(myUnpenalizedCost);
   }
 
-  ///// with the best state
-  LP_ts[n][CurrentState].get_min_argmin_label_state_position_ListPiece(malsp);
-  CurrentGlobalCost = malsp[0];
-  parameters1.push_back(malsp[1]); // = argmin
-  changepoints1.push_back(CurrentChgpt); // = n
-  states1.push_back(CurrentState); // = the best state
-
-  /// BACKTRACK
-  ///////////////////////////////
-  /// previous to FINAL STATE ///
-  ///////////////////////////////
-
-  bool out;
-  bool boolForced;
-  double decay = 0;
-  double correction = 1;
-
-  while(malsp[2] > 0) ///while Label > 0
-  {
-    out = false;
-    boolForced = false;
-    decay = m_graph.recursiveState(CurrentState);
-    if(decay != 1){correction = std::pow(decay, parameters1.back() - malsp[2] + 1);}else{correction = 1;}
-
-    constrainedInterval = m_graph.buildInterval(malsp[1]*correction, malsp[3], CurrentState, out); ///update out
-
-    CurrentState = malsp[3];
-    CurrentChgpt = malsp[2];
-
-    //TO UPDATE: malsp[4] = position
-    LP_ts[(int) malsp[2]][(int) malsp[3]].get_min_argmin_label_state_position_onePiece(malsp, (int) malsp[4], constrainedInterval, out, boolForced); ///update boolForced
-
-    //update CurrentGlobalCost and boolForced if argmin on a bound
-    CurrentGlobalCost = CurrentGlobalCost - m_graph.findBeta(malsp[3], CurrentState);
-    //if(malsp[1] == nodeConstr[CurrentState].geta() || malsp[1] == nodeConstr[CurrentState].getb()){boolForced = true;}
-
-    parameters1.push_back(malsp[1]);
-    changepoints1.push_back(CurrentChgpt);
-    states1.push_back(CurrentState);
-    forced1.push_back(boolForced);
-  }
-
-  globalCost.push_back(CurrentGlobalCost);
-
-  ////
-  parameters.push_back(parameters1);
-  changepoints.push_back(changepoints1);
-  states.push_back(states1);
-  forced.push_back(forced1);
-
-  delete(malsp);
-  delete(malsp_temp);
-  //delete(nodeConstr);
+  delete(minArgminEdge);
 }
 
 
-///###///###///###///###///###///###///###///###///###///###///###///###///###///###///###
+//##### buildChangepointVectors #####//////##### buildChangepointVectors #####//////##### buildChangepointVectors #####///
+//##### buildChangepointVectors #####//////##### buildChangepointVectors #####//////##### buildChangepointVectors #####///
+
+void Omega::buildChangepointVectors()
+{
+
+}
+
+
 ///###///###///###///###///###///###///###///###///###///###///###///###///###///###///###
 ///###///###///###///###///###///###///###///###///###///###///###///###///###///###///###
 
